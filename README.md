@@ -10,10 +10,13 @@ your journal, and forge your own.
 
 - **Today** — a fresh side quest each day that resets at midnight. Don't like it?
   You get **one reroll per day**. Add any quest you fancy straight to your journal.
-- **Journal** — your active and completed quests. Check quests off as you go and
-  watch your hall of triumphs grow.
-- **Generate** — forge your own custom side quests (name, task, time, cost,
-  spirit, difficulty, icons) and add them to your journal.
+- **Journal** — your active and completed quests. Check quests off as you go,
+  watch your hall of triumphs grow, and **filter by category** (Nature,
+  Adventure, Kindness, Creativity, and more).
+- **Generate** — forge your own custom side quests (name, task, category, time,
+  cost, difficulty, icons) and add them to your journal.
+- **Categories & rarity** — every quest carries a themed category tag, and rare
+  **Legendary** quests drop occasionally for a more game-like feel.
 - **Day / Night** parchment theme toggle.
 - Everything is saved locally in your browser — no account, no backend.
 

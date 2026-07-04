@@ -84,6 +84,8 @@
       <section id="view-journal" class="view" aria-labelledby="journal-heading" hidden>
         <h2 id="journal-heading" class="view__heading">Your Journal</h2>
 
+        <div id="journal-filters" class="filters" role="group" aria-label="Filter quests by category"></div>
+
         <div class="journal">
           <div class="journal__col">
             <h3 class="journal__subhead">
@@ -161,16 +163,9 @@
               </select>
             </label>
             <label class="forge__field">
-              <span class="forge__label">Spirit</span>
-              <select id="f-spirit" name="spirit">
-                <option selected>Adventurous</option>
-                <option>Peaceful</option>
-                <option>Kind</option>
-                <option>Creative</option>
-                <option>Whimsical</option>
-                <option>Social</option>
-                <option>Reflective</option>
-                <option>Nurturing</option>
+              <span class="forge__label">Category</span>
+              <select id="f-category" name="category">
+                <!-- options populated from the quest compendium -->
               </select>
             </label>
             <label class="forge__field">

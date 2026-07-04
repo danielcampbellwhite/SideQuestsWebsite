@@ -128,9 +128,10 @@
       title: quest.title,
       description: quest.description,
       icons: quest.icons || [],
+      category: quest.category || "random",
+      rarity: quest.rarity || "common",
       time: quest.time,
       cost: quest.cost,
-      spirit: quest.spirit,
       difficulty: quest.difficulty,
       status: "active",
       addedAt: todayKey(),
@@ -143,21 +144,35 @@
      Tag rendering
      ============================================================ */
   function tagHtml(quest) {
+    let html = "";
+    const cat = CATEGORIES[quest.category];
+    if (cat) {
+      html +=
+        `<span class="tag tag--category" style="border-color:${cat.color}">` +
+        `<span class="tag__dot" style="background:${cat.color}"></span>` +
+        `${cat.icon} ${escapeHtml(cat.label)}</span>`;
+    }
     const items = [
-      ["time", "⏳", quest.time],
-      ["cost", "💰", quest.cost],
-      ["spirit", "✦", quest.spirit],
-      ["diff", "⚔", quest.difficulty],
+      ["time", quest.time],
+      ["cost", quest.cost],
+      ["diff", quest.difficulty],
     ];
-    return items
-      .filter((i) => i[2])
+    html += items
+      .filter((i) => i[1])
       .map(
         (i) =>
           `<span class="tag tag--${i[0]}"><span class="tag__dot"></span>${escapeHtml(
-            i[2]
+            i[1]
           )}</span>`
       )
       .join("");
+    return html;
+  }
+
+  function legendaryBadge(quest) {
+    return quest.rarity === "legendary"
+      ? `<span class="legendary-badge">★ Legendary Quest ★</span>`
+      : "";
   }
   function escapeHtml(str) {
     return String(str == null ? "" : str)
@@ -175,8 +190,18 @@
   const rerollHint = document.getElementById("reroll-hint");
   const MAX_REROLLS = 1;
 
+  // Legendary quests drop rarely (~1 in 7 days); the rest are drawn from commons.
   function pickQuestIndex(seedStr) {
-    return hashString(seedStr) % QUEST_POOL.length;
+    const seed = hashString(seedStr);
+    const commons = [];
+    const legends = [];
+    QUEST_POOL.forEach((q, i) => {
+      (q.rarity === "legendary" ? legends : commons).push(i);
+    });
+    if (legends.length && seed % 7 === 0) {
+      return legends[seed % legends.length];
+    }
+    return commons[seed % commons.length];
   }
 
   function getTodayState() {
@@ -204,7 +229,8 @@
       .join("");
 
     todayQuestEl.innerHTML = `
-      <article class="scroll">
+      <article class="scroll${quest.rarity === "legendary" ? " scroll--legendary" : ""}">
+        ${legendaryBadge(quest)}
         <h3 class="quest__title">${escapeHtml(quest.title)}</h3>
         <div class="quest__icons">${iconsHtml}</div>
         <div class="quest__tags">${tagHtml(quest)}</div>
@@ -240,9 +266,8 @@
   rerollBtn.addEventListener("click", () => {
     const state = getTodayState();
     if (state.rerollsUsed >= MAX_REROLLS) return;
-    // advance to a different quest deterministically
-    let next = (state.index + 1 + (hashString(state.date + "r") % (QUEST_POOL.length - 1)))
-      % QUEST_POOL.length;
+    // draw a fresh quest (still able to surprise you with a legendary)
+    let next = pickQuestIndex(state.date + "-reroll");
     if (next === state.index) next = (next + 1) % QUEST_POOL.length;
     state.index = next;
     state.rerollsUsed += 1;
@@ -254,18 +279,82 @@
   /* ============================================================
      JOURNAL
      ============================================================ */
+  let journalFilter = "all";
+
+  function renderFilters(list) {
+    const container = document.getElementById("journal-filters");
+    if (!list.length) {
+      container.innerHTML = "";
+      journalFilter = "all";
+      return;
+    }
+    const counts = {};
+    list.forEach((q) => {
+      counts[q.category] = (counts[q.category] || 0) + 1;
+    });
+    // if the active filter no longer exists in the journal, fall back to All
+    if (journalFilter !== "all" && !counts[journalFilter]) journalFilter = "all";
+
+    const cats = Object.keys(CATEGORIES).filter((c) => counts[c]);
+    let html = filterChip("all", "All", "", list.length, null);
+    cats.forEach((c) => {
+      html += filterChip(
+        c,
+        CATEGORIES[c].label,
+        CATEGORIES[c].icon,
+        counts[c],
+        CATEGORIES[c].color
+      );
+    });
+    container.innerHTML = html;
+    Array.from(container.querySelectorAll("[data-filter]")).forEach((el) => {
+      el.addEventListener("click", () => {
+        journalFilter = el.dataset.filter;
+        renderJournal();
+      });
+    });
+  }
+
+  function filterChip(key, label, icon, count, color) {
+    const active = journalFilter === key;
+    const style = color ? ` style="--chip:${color}"` : "";
+    return (
+      `<button type="button" class="filter-chip${active ? " is-active" : ""}"` +
+      ` data-filter="${key}"${style}>` +
+      `${icon ? icon + " " : ""}${escapeHtml(label)}` +
+      `<span class="filter-chip__n">${count}</span></button>`
+    );
+  }
+
   function renderJournal() {
     const list = getJournal();
-    const active = list.filter((q) => q.status === "active");
-    const done = list.filter((q) => q.status === "done");
+    renderFilters(list);
+    const scoped =
+      journalFilter === "all"
+        ? list
+        : list.filter((q) => q.category === journalFilter);
+    const active = scoped.filter((q) => q.status === "active");
+    const done = scoped.filter((q) => q.status === "done");
 
     const activeList = document.getElementById("active-list");
     const doneList = document.getElementById("done-list");
     activeList.innerHTML = active.map((q) => cardHtml(q)).join("");
     doneList.innerHTML = done.map((q) => cardHtml(q)).join("");
 
-    document.getElementById("active-empty").hidden = active.length > 0;
-    document.getElementById("done-empty").hidden = done.length > 0;
+    const label =
+      journalFilter === "all" ? "" : " " + CATEGORIES[journalFilter].label;
+    const activeEmpty = document.getElementById("active-empty");
+    const doneEmpty = document.getElementById("done-empty");
+    activeEmpty.hidden = active.length > 0;
+    doneEmpty.hidden = done.length > 0;
+    if (journalFilter !== "all") {
+      activeEmpty.innerHTML = `No active${escapeHtml(label)} quests right now.`;
+      doneEmpty.innerHTML = `No completed${escapeHtml(label)} quests yet.`;
+    } else {
+      activeEmpty.innerHTML =
+        "No quests underway. Claim one from <em>Today</em> or forge your own in <em>Generate</em>.";
+      doneEmpty.innerHTML = "Your hall of triumphs awaits its first tale.";
+    }
     document.getElementById("active-tally").textContent = active.length;
     document.getElementById("done-tally").textContent = done.length;
 
@@ -286,11 +375,12 @@
       : `Claimed ${escapeHtml(q.addedAt || "")}`;
     return `
       <li>
-        <article class="card">
+        <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}">
           <div class="card__top">
             <input class="card__check" type="checkbox" ${done ? "checked" : ""}
               data-toggle="${q.uid}" aria-label="Mark '${escapeHtml(q.title)}' complete" />
             <div class="card__body">
+              ${q.rarity === "legendary" ? `<span class="legendary-badge legendary-badge--sm">★ Legendary</span>` : ""}
               <h4 class="card__title">${escapeHtml(q.title)}</h4>
               ${iconsHtml ? `<div class="card__icons">${escapeHtml(iconsHtml)}</div>` : ""}
               <p class="card__desc">${escapeHtml(q.description)}</p>
@@ -351,9 +441,9 @@
       title,
       description,
       icons,
+      category: document.getElementById("f-category").value,
       time: document.getElementById("f-time").value,
       cost: document.getElementById("f-cost").value,
-      spirit: document.getElementById("f-spirit").value,
       difficulty: document.getElementById("f-diff").value,
     };
     addToJournal(quest, null);
@@ -365,6 +455,20 @@
   /* ============================================================
      Init
      ============================================================ */
+  // populate the Generate category dropdown from the compendium
+  (function fillCategorySelect() {
+    const sel = document.getElementById("f-category");
+    if (!sel) return;
+    sel.innerHTML = Object.keys(CATEGORIES)
+      .map(
+        (c, idx) =>
+          `<option value="${c}"${idx === 0 ? " selected" : ""}>${
+            CATEGORIES[c].icon
+          } ${CATEGORIES[c].label}</option>`
+      )
+      .join("");
+  })();
+
   document.getElementById("foot-date").textContent = new Date().toLocaleDateString(
     undefined,
     { weekday: "long", year: "numeric", month: "long", day: "numeric" }
