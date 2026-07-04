@@ -124,6 +124,29 @@
     }, dur);
   }
 
+  /* ---------- confirm modal ---------- */
+  const modalEl = document.getElementById("modal");
+  const modalMsg = document.getElementById("modal-msg");
+  const modalOk = document.getElementById("modal-ok");
+  function confirmDialog(message, okLabel) {
+    return new Promise((resolve) => {
+      modalMsg.textContent = message;
+      modalOk.innerHTML = `<span aria-hidden="true">✓</span> ${okLabel || "Yes, complete it"}`;
+      modalEl.classList.add("is-open");
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      function finish(val) {
+        modalEl.classList.remove("is-open");
+        modalOk.removeEventListener("click", onOk);
+        cancels.forEach((c) => c.removeEventListener("click", onCancel));
+        resolve(val);
+      }
+      const cancels = Array.from(modalEl.querySelectorAll("[data-modal-cancel]"));
+      modalOk.addEventListener("click", onOk);
+      cancels.forEach((c) => c.addEventListener("click", onCancel));
+    });
+  }
+
   /* ============================================================
      Theme
      ============================================================ */
@@ -167,6 +190,7 @@
     tabs.forEach((t) => t.classList.toggle("is-active", t.dataset.route === name));
     if (name === "journal") renderJournal();
     if (name === "hero") renderHero();
+    if (name === "generate") updateForgeLock();
     if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -472,11 +496,15 @@
      TODAY
      ============================================================ */
   const todayQuestEl = document.getElementById("today-quest");
-  const rerollBtn = document.getElementById("reroll-btn");
-  const rerollHint = document.getElementById("reroll-hint");
   const MAX_REROLLS = 1;
+  const MAX_ACTIVE = 5;
 
-  // Legendary quests drop rarely (~1 in 7 days); the rest are drawn from commons.
+  function activeCount() {
+    return getJournal().filter((q) => q.status === "active").length;
+  }
+
+  // Legendary quests drop rarely (~1 in 14 days on average); the rest come
+  // from the common pool. Deterministic per seed so a day's quest is stable.
   function pickQuestIndex(seedStr) {
     const seed = hashString(seedStr);
     const commons = [];
@@ -484,7 +512,7 @@
     QUEST_POOL.forEach((q, i) => {
       (q.rarity === "legendary" ? legends : commons).push(i);
     });
-    if (legends.length && seed % 7 === 0) {
+    if (legends.length && seed % 14 === 0) {
       return legends[seed % legends.length];
     }
     return commons[seed % commons.length];
@@ -494,73 +522,160 @@
     const key = todayKey();
     let state = load(STORE.today, null);
     if (!state || state.date !== key) {
-      // new day → fresh quest, reroll refilled
+      // new day → fresh, hidden quest; reroll refilled; not yet accepted
       state = {
         date: key,
         index: pickQuestIndex(key),
+        revealed: false,
         rerollsUsed: 0,
+        accepted: false,
       };
       save(STORE.today, state);
     }
+    // fill in fields for anyone with older saved state
+    if (state.revealed === undefined) state.revealed = false;
+    if (state.accepted === undefined) state.accepted = false;
     return state;
   }
+  function saveTodayState(state) {
+    save(STORE.today, state);
+  }
 
-  function renderToday() {
-    const state = getTodayState();
-    const quest = QUEST_POOL[state.index];
-    const claimed = inJournal("daily:" + state.date + ":" + quest.id);
-
+  function questScrollHtml(quest, inner) {
     const iconsHtml = (quest.icons || [])
       .map((i) => `<span>${escapeHtml(i)}</span>`)
       .join("");
-
-    todayQuestEl.innerHTML = `
+    return `
       <article class="scroll${quest.rarity === "legendary" ? " scroll--legendary" : ""}">
         ${legendaryBadge(quest)}
         <h3 class="quest__title">${escapeHtml(quest.title)}</h3>
         <div class="quest__icons">${iconsHtml}</div>
         <div class="quest__tags">${tagHtml(quest)}</div>
         <p class="quest__desc">${escapeHtml(quest.description)}</p>
-        <div class="quest__cta">
-          ${
-            claimed
-              ? `<button class="btn btn--ghost" type="button" disabled>✓ In Your Journal</button>`
-              : `<button class="btn btn--primary" id="claim-btn" type="button"><span aria-hidden="true">✦</span> Add to Journal</button>`
-          }
-        </div>
-        ${
-          claimed
-            ? `<p class="quest__claimed">This adventure has been recorded. Fare well, traveller.</p>`
-            : ""
-        }
+        ${inner}
       </article>`;
+  }
 
-    if (!claimed) {
-      document.getElementById("claim-btn").addEventListener("click", () => {
-        addToJournal(quest, "daily:" + state.date + ":" + quest.id);
-        toast("⚔️ Quest added to your journal!");
+  function renderToday() {
+    const state = getTodayState();
+    const quest = QUEST_POOL[state.index];
+    const active = activeCount();
+
+    // 1) Already accepted today → come back tomorrow.
+    if (state.accepted) {
+      todayQuestEl.innerHTML = `
+        <article class="scroll scroll--rest">
+          <div class="rest__mark">🌙</div>
+          <h3 class="quest__title">Quest Accepted</h3>
+          <p class="quest__desc">
+            You've taken on <strong>${escapeHtml(quest.title)}</strong> today.
+            Come back tomorrow for a new quest.
+          </p>
+          <div class="quest__cta">
+            <button class="btn btn--ghost" type="button" data-goto="journal">
+              <span aria-hidden="true">📖</span> View in Journal
+            </button>
+          </div>
+        </article>`;
+      wireGoto();
+      return;
+    }
+
+    // 2) Journal full → daily quests locked.
+    if (active >= MAX_ACTIVE) {
+      todayQuestEl.innerHTML = `
+        <article class="scroll scroll--locked">
+          <div class="rest__mark">🔒</div>
+          <h3 class="quest__title">Daily Quests Locked</h3>
+          <p class="quest__desc">
+            Your journal is full (<strong>${active}/${MAX_ACTIVE} active</strong>).
+            Complete some quests to unlock your next daily quest.
+          </p>
+          <div class="quest__cta">
+            <button class="btn btn--primary" type="button" data-goto="journal">
+              <span aria-hidden="true">⚔️</span> Go to Journal
+            </button>
+          </div>
+        </article>`;
+      wireGoto();
+      return;
+    }
+
+    // 3) Not revealed yet → face-down mystery scroll.
+    if (!state.revealed) {
+      todayQuestEl.innerHTML = `
+        <article class="scroll scroll--mystery">
+          <div class="mystery__mark">?</div>
+          <h3 class="quest__title">A Quest Awaits</h3>
+          <p class="quest__desc">
+            Today's side quest is sealed. Reveal it to see what adventure the
+            day holds — then add it to your journal when you're ready.
+          </p>
+          <div class="quest__cta">
+            <button class="btn btn--primary" id="reveal-btn" type="button">
+              <span aria-hidden="true">✦</span> Reveal Today's Quest
+            </button>
+          </div>
+        </article>`;
+      document.getElementById("reveal-btn").addEventListener("click", () => {
+        state.revealed = true;
+        saveTodayState(state);
+        toast("✨ Your quest is revealed!");
+        renderToday();
+      });
+      return;
+    }
+
+    // 4) Revealed, not yet accepted → show quest with Accept + (maybe) Reroll.
+    const canReroll = state.rerollsUsed < MAX_REROLLS;
+    const inner = `
+      <div class="quest__cta quest__cta--stack">
+        <button class="btn btn--primary" id="accept-btn" type="button">
+          <span aria-hidden="true">✦</span> Accept &amp; Add to Journal
+        </button>
+        ${
+          canReroll
+            ? `<button class="btn btn--ghost" id="reroll-btn" type="button">
+                 <span aria-hidden="true">🎲</span> Reroll <span class="reroll-hint">(1 left)</span>
+               </button>`
+            : `<p class="reroll-note">🎲 You rerolled — this is your quest for today.
+                 Accept it, or leave it and a fresh one arrives tomorrow.</p>`
+        }
+      </div>`;
+    todayQuestEl.innerHTML = questScrollHtml(quest, inner);
+
+    document.getElementById("accept-btn").addEventListener("click", () => {
+      if (activeCount() >= MAX_ACTIVE) {
+        renderToday();
+        return;
+      }
+      const before = computeStats();
+      addToJournal(quest, "daily:" + state.date + ":" + quest.id);
+      state.accepted = true;
+      saveTodayState(state);
+      toast("⚔️ Quest accepted — added to your journal!");
+      announceProgress(before, computeStats());
+      renderToday();
+    });
+
+    if (canReroll) {
+      document.getElementById("reroll-btn").addEventListener("click", () => {
+        let next = pickQuestIndex(state.date + "-reroll");
+        if (next === state.index) next = (next + 1) % QUEST_POOL.length;
+        state.index = next;
+        state.rerollsUsed += 1;
+        saveTodayState(state);
+        toast("🎲 The dice are cast — this is your quest for today.");
         renderToday();
       });
     }
-
-    // reroll availability
-    const left = MAX_REROLLS - state.rerollsUsed;
-    rerollBtn.disabled = left <= 0;
-    rerollHint.textContent = left > 0 ? `(${left} left today)` : "(none left today)";
   }
 
-  rerollBtn.addEventListener("click", () => {
-    const state = getTodayState();
-    if (state.rerollsUsed >= MAX_REROLLS) return;
-    // draw a fresh quest (still able to surprise you with a legendary)
-    let next = pickQuestIndex(state.date + "-reroll");
-    if (next === state.index) next = (next + 1) % QUEST_POOL.length;
-    state.index = next;
-    state.rerollsUsed += 1;
-    save(STORE.today, state);
-    toast("🎲 The dice are cast — a new quest appears.");
-    renderToday();
-  });
+  function wireGoto() {
+    Array.from(todayQuestEl.querySelectorAll("[data-goto]")).forEach((el) => {
+      el.addEventListener("click", () => route(el.dataset.goto));
+    });
+  }
 
   /* ============================================================
      JOURNAL
@@ -645,67 +760,79 @@
     document.getElementById("done-tally").textContent = done.length;
 
     // wire events
-    Array.from(document.querySelectorAll("[data-toggle]")).forEach((el) => {
-      el.addEventListener("change", () => toggleComplete(el.dataset.toggle));
+    Array.from(document.querySelectorAll("[data-complete]")).forEach((el) => {
+      el.addEventListener("click", () => requestComplete(el.dataset.complete));
     });
     Array.from(document.querySelectorAll("[data-remove]")).forEach((el) => {
-      el.addEventListener("click", () => removeQuest(el.dataset.remove));
+      el.addEventListener("click", () => requestDiscard(el.dataset.remove));
     });
   }
 
   function cardHtml(q) {
     const done = q.status === "done";
     const iconsHtml = (q.icons || []).join(" ");
-    const stamp = done
-      ? `Completed ${escapeHtml(q.completedAt || "")} · +${questXp(q)} XP`
-      : `Claimed ${escapeHtml(q.addedAt || "")} · ${questXp(q)} XP`;
+    const foot = done
+      ? `<div class="card__foot">
+           <span class="card__stamp card__stamp--done">
+             ✓ Completed ${escapeHtml(q.completedAt || "")} · +${questXp(q)} XP
+           </span>
+         </div>`
+      : `<div class="card__foot card__foot--actions">
+           <button class="btn btn--mini btn--primary" type="button" data-complete="${q.uid}">
+             <span aria-hidden="true">✓</span> Mark Complete
+           </button>
+           <span class="card__reward">+${questXp(q)} XP</span>
+           <button class="card__remove" type="button" data-remove="${q.uid}">Abandon</button>
+         </div>`;
     return `
       <li>
-        <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}">
-          <div class="card__top">
-            <input class="card__check" type="checkbox" ${done ? "checked" : ""}
-              data-toggle="${q.uid}" aria-label="Mark '${escapeHtml(q.title)}' complete" />
-            <div class="card__body">
-              ${q.rarity === "legendary" ? `<span class="legendary-badge legendary-badge--sm">★ Legendary</span>` : ""}
-              <h4 class="card__title">${escapeHtml(q.title)}</h4>
-              ${iconsHtml ? `<div class="card__icons">${escapeHtml(iconsHtml)}</div>` : ""}
-              <p class="card__desc">${escapeHtml(q.description)}</p>
-              <div class="card__meta">${tagHtml(q)}</div>
-              <div class="card__foot">
-                <span class="card__stamp">${stamp}</span>
-                <button class="card__remove" type="button" data-remove="${q.uid}">Discard</button>
-              </div>
-            </div>
+        <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}${
+      done ? " card--done" : ""
+    }">
+          <div class="card__body">
+            ${q.rarity === "legendary" ? `<span class="legendary-badge legendary-badge--sm">★ Legendary</span>` : ""}
+            <h4 class="card__title">${escapeHtml(q.title)}</h4>
+            ${iconsHtml ? `<div class="card__icons">${escapeHtml(iconsHtml)}</div>` : ""}
+            <p class="card__desc">${escapeHtml(q.description)}</p>
+            <div class="card__meta">${tagHtml(q)}</div>
+            ${foot}
           </div>
         </article>
       </li>`;
   }
 
-  function toggleComplete(uidVal) {
+  // Completion is one-way and confirmed — no un-checking.
+  async function requestComplete(uidVal) {
+    const q = getJournal().find((x) => x.uid === uidVal);
+    if (!q || q.status === "done") return;
+    const ok = await confirmDialog(
+      "Are you sure you want to mark this quest as complete? This cannot be undone.",
+      "Yes, complete it"
+    );
+    if (!ok) return;
     const list = getJournal();
-    const q = list.find((x) => x.uid === uidVal);
-    if (!q) return;
-    const before = computeStats(); // reads storage = pre-change state
-    if (q.status === "active") {
-      q.status = "done";
-      q.completedAt = todayKey();
-      setJournal(list);
-      toast(`🏆 Quest complete · +${questXp(q)} XP`);
-      announceProgress(before, computeStats());
-    } else {
-      q.status = "active";
-      q.completedAt = null;
-      setJournal(list);
-      toast(`Quest returned to active · −${questXp(q)} XP`);
-    }
+    const target = list.find((x) => x.uid === uidVal);
+    if (!target || target.status === "done") return;
+    const before = computeStats();
+    target.status = "done";
+    target.completedAt = todayKey();
+    setJournal(list);
+    toast(`🏆 Quest complete · +${questXp(target)} XP`);
+    announceProgress(before, computeStats());
     renderJournal();
   }
 
-  function removeQuest(uidVal) {
-    const list = getJournal().filter((x) => x.uid !== uidVal);
-    setJournal(list);
+  async function requestDiscard(uidVal) {
+    const q = getJournal().find((x) => x.uid === uidVal);
+    if (!q || q.status === "done") return; // completed quests are permanent
+    const ok = await confirmDialog(
+      `Abandon "${q.title}"? It will be removed from your active quests.`,
+      "Abandon quest"
+    );
+    if (!ok) return;
+    setJournal(getJournal().filter((x) => x.uid !== uidVal));
     renderJournal();
-    renderToday(); // in case a claimed daily quest was discarded
+    renderToday(); // a freed slot may unlock the daily quest
     toast("The quest fades from your journal.");
   }
 
@@ -713,8 +840,23 @@
      GENERATE
      ============================================================ */
   const form = document.getElementById("generate-form");
+
+  // Reflect the 5-active cap on the Generate page.
+  function updateForgeLock() {
+    const locked = activeCount() >= MAX_ACTIVE;
+    const note = document.getElementById("forge-lock");
+    if (note) note.hidden = !locked;
+    form.classList.toggle("is-locked", locked);
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = locked;
+  }
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    if (activeCount() >= MAX_ACTIVE) {
+      toast(`Your journal is full — you can hold ${MAX_ACTIVE} active quests.`);
+      return;
+    }
     const title = document.getElementById("f-title").value.trim();
     const description = document.getElementById("f-desc").value.trim();
     if (!title || !description) return;

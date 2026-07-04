@@ -85,12 +85,6 @@
       <section id="view-today" class="view is-active" aria-labelledby="today-heading">
         <h2 id="today-heading" class="view__heading">Today's Quest</h2>
         <div id="today-quest"></div>
-        <div class="reroll-row">
-          <button id="reroll-btn" class="btn btn--ghost" type="button">
-            <span aria-hidden="true">🎲</span> Reroll
-            <span class="reroll-row__hint" id="reroll-hint">(1 left today)</span>
-          </button>
-        </div>
       </section>
 
       <!-- ===== JOURNAL ===== -->
@@ -129,6 +123,11 @@
         <h2 id="generate-heading" class="view__heading">Forge a Quest</h2>
         <p class="view__sub">
           Craft your own side quest and add it straight to your journal.
+        </p>
+
+        <p id="forge-lock" class="lock-note" hidden>
+          <span aria-hidden="true">🔒</span> Your journal is full — you can hold
+          <strong>5 active quests</strong> at a time. Complete some before forging more.
         </p>
 
         <form id="generate-form" class="forge" autocomplete="off">
@@ -230,6 +229,22 @@
         <div id="hero-achievements" class="ach-grid"></div>
       </section>
     </main>
+
+    <!-- ===== Confirm modal ===== -->
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-msg">
+      <div class="modal__backdrop" data-modal-cancel></div>
+      <div class="modal__card">
+        <p class="modal__msg" id="modal-msg"></p>
+        <div class="modal__actions">
+          <button id="modal-cancel" class="btn btn--ghost" type="button" data-modal-cancel>
+            Cancel
+          </button>
+          <button id="modal-ok" class="btn btn--primary" type="button">
+            <span aria-hidden="true">✓</span> Yes, complete it
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== Toast ===== -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
