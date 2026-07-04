@@ -1411,6 +1411,66 @@ html[data-mode="dark"] .theme-toggle__icon--moon {
   opacity: 0.92;
 }
 
+/* selectable active cards */
+.card--active {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.card--active:has(.card__select:checked) {
+  border-color: var(--gold);
+  box-shadow: 0 3px 12px var(--shadow), inset 0 0 0 1.5px var(--gold);
+}
+.card__select-wrap {
+  flex: 0 0 auto;
+  padding-top: 2px;
+  cursor: pointer;
+}
+.card__select {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--gold);
+  border-radius: 6px;
+  background: var(--parchment);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease;
+}
+.card__select:hover {
+  background: var(--parchment-deep);
+}
+.card__select:checked {
+  background: linear-gradient(to bottom, var(--gold-bright), var(--gold));
+}
+.card__select:checked::after {
+  content: "✓";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #3b2a12;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* bulk complete bar */
+.complete-bar {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1.5px dashed var(--line);
+}
+.complete-bar[hidden] {
+  display: none;
+}
+.complete-bar__hint {
+  font-size: 0.85rem;
+  color: var(--ink-faint);
+  font-style: italic;
+  text-align: center;
+  margin: 0 0 10px;
+}
+
 /* forge cap note */
 .lock-note {
   background: var(--parchment);
