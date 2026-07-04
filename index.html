@@ -14,7 +14,7 @@
       href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=MedievalSharp&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css?v=5" />
+    <link rel="stylesheet" href="styles.css?v=6" />
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9C%3C/text%3E%3C/svg%3E"
@@ -84,6 +84,7 @@
       <!-- ===== TODAY ===== -->
       <section id="view-today" class="view is-active" aria-labelledby="today-heading">
         <h2 id="today-heading" class="view__heading">Today's Quest</h2>
+        <div id="today-streak" class="streak" hidden></div>
         <div id="today-quest"></div>
       </section>
 
@@ -237,6 +238,40 @@
       </section>
     </main>
 
+    <!-- ===== Onboarding (first visit) ===== -->
+    <div id="onboarding" class="onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" hidden>
+      <div class="onboarding__backdrop"></div>
+      <div class="onboarding__card">
+        <div class="onboarding__crest">📜</div>
+        <h2 class="onboarding__title" id="onboarding-title">Welcome, Traveller</h2>
+        <p class="onboarding__lead">
+          SideQuests drops you one small real-world adventure each day —
+          turning ordinary days into another line in your story.
+        </p>
+        <ul class="onboarding__list">
+          <li>
+            <span aria-hidden="true">🗺️</span>
+            <div><strong>Today</strong> — reveal your daily quest and accept it to your journal (up to 5 at a time).</div>
+          </li>
+          <li>
+            <span aria-hidden="true">📖</span>
+            <div><strong>Journal</strong> — tick quests off as you finish them. Completing is final, so make it count.</div>
+          </li>
+          <li>
+            <span aria-hidden="true">✦</span>
+            <div><strong>Generate</strong> — forge your own custom quests.</div>
+          </li>
+          <li>
+            <span aria-hidden="true">🛡️</span>
+            <div><strong>Hero</strong> — earn XP, level up, and unlock new realms &amp; achievements.</div>
+          </li>
+        </ul>
+        <button id="onboarding-begin" class="btn btn--primary btn--block" type="button">
+          <span aria-hidden="true">✦</span> Begin Your Adventure
+        </button>
+      </div>
+    </div>
+
     <!-- ===== Confirm modal ===== -->
     <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-msg">
       <div class="modal__backdrop" data-modal-cancel></div>
@@ -257,10 +292,13 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <footer class="site-foot">
-      <p>Built for tiny days that deserve a story. · <span id="foot-date"></span></p>
+      <p>
+        Built for tiny days that deserve a story. · <span id="foot-date"></span>
+        · <a href="#" id="how-it-works" class="foot-link">How it works</a>
+      </p>
     </footer>
 
-    <script src="quests.js?v=5"></script>
-    <script src="app.js?v=5"></script>
+    <script src="quests.js?v=6"></script>
+    <script src="app.js?v=6"></script>
   </body>
 </html>
