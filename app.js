@@ -9,6 +9,8 @@
     theme: "sq.theme",
     today: "sq.today",
     journal: "sq.journal",
+    onboarded: "sq.onboarded",
+    started: "sq.started",
   };
 
   /* ============================================================
@@ -188,6 +190,7 @@
       views[key].classList.toggle("is-active", active);
     });
     tabs.forEach((t) => t.classList.toggle("is-active", t.dataset.route === name));
+    if (name === "today") renderToday();
     if (name === "journal") renderJournal();
     if (name === "hero") renderHero();
     if (name === "generate") updateForgeLock();
@@ -518,14 +521,26 @@
     return commons[seed % commons.length];
   }
 
+  // A brand-new traveller's very first quest is always an easy, quick win.
+  function pickFirstQuestIndex(seedStr) {
+    const seed = hashString(seedStr);
+    const easy = [];
+    QUEST_POOL.forEach((q, i) => {
+      if (q.rarity !== "legendary" && q.difficulty === "Easy") easy.push(i);
+    });
+    return easy.length ? easy[seed % easy.length] : pickQuestIndex(seedStr);
+  }
+
   function getTodayState() {
     const key = todayKey();
     let state = load(STORE.today, null);
     if (!state || state.date !== key) {
       // new day → fresh, hidden quest; reroll refilled; not yet accepted
+      const firstEver = !load(STORE.started, false);
+      if (firstEver) save(STORE.started, true);
       state = {
         date: key,
-        index: pickQuestIndex(key),
+        index: firstEver ? pickFirstQuestIndex(key) : pickQuestIndex(key),
         revealed: false,
         rerollsUsed: 0,
         accepted: false,
@@ -556,7 +571,20 @@
       </article>`;
   }
 
+  function renderStreak() {
+    const el = document.getElementById("today-streak");
+    if (!el) return;
+    const n = computeStats().streak;
+    el.hidden = false;
+    el.classList.toggle("streak--active", n > 0);
+    el.innerHTML =
+      n > 0
+        ? `<span class="streak__flame">🔥</span> <strong>${n}-day streak</strong> — complete a quest today to keep it alive!`
+        : `<span class="streak__flame">🔥</span> Complete a quest today to start a streak.`;
+  }
+
   function renderToday() {
+    renderStreak();
     const state = getTodayState();
     const quest = QUEST_POOL[state.index];
     const active = activeCount();
@@ -965,9 +993,31 @@
     applyTheme(THEMES[saved] && level >= THEMES[saved].level ? saved : "light");
   })();
 
+  // Onboarding overlay (first visit) + reopenable via the footer link.
+  const onboardingEl = document.getElementById("onboarding");
+  function openOnboarding() {
+    onboardingEl.hidden = false;
+  }
+  function closeOnboarding() {
+    onboardingEl.hidden = true;
+    save(STORE.onboarded, true);
+  }
+  document
+    .getElementById("onboarding-begin")
+    .addEventListener("click", () => {
+      closeOnboarding();
+      route("today");
+    });
+  document.getElementById("how-it-works").addEventListener("click", (e) => {
+    e.preventDefault();
+    openOnboarding();
+  });
+
   updateBadge();
   refreshHeroBar();
   renderToday();
   const initial = (location.hash || "#today").replace("#", "");
   route(initial);
+
+  if (!load(STORE.onboarded, false)) openOnboarding();
 })();
