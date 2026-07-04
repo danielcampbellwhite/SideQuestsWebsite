@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="SideQuests — a daily tiny adventure to turn each ordinary day into another line in your story."
+    />
+    <title>SideQuests · Your Daily Adventure</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=MedievalSharp&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%93%9C%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <!-- ===== Landscape banner ===== -->
+    <header class="banner">
+      <div class="banner__sky"></div>
+      <div class="banner__mountains"></div>
+      <div class="banner__hills"></div>
+      <div class="banner__mist"></div>
+
+      <div class="banner__content">
+        <p class="banner__welcome">Welcome to</p>
+        <h1 class="banner__title">Side Quests</h1>
+        <p class="banner__tagline">
+          Turn each tiny adventure into another line in your story.
+        </p>
+
+        <button
+          id="theme-toggle"
+          class="theme-toggle"
+          type="button"
+          role="switch"
+          aria-checked="false"
+          aria-label="Toggle day and night"
+        >
+          <span class="theme-toggle__track">
+            <span class="theme-toggle__thumb">
+              <span class="theme-toggle__icon theme-toggle__icon--sun">☀</span>
+              <span class="theme-toggle__icon theme-toggle__icon--moon">☾</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===== Navigation ===== -->
+    <nav class="nav" aria-label="Primary">
+      <button class="nav__tab is-active" data-route="today" type="button">
+        <span class="nav__glyph">🏰</span> Today
+      </button>
+      <button class="nav__tab" data-route="journal" type="button">
+        <span class="nav__glyph">📖</span> Journal
+        <span class="nav__badge" id="journal-count" hidden>0</span>
+      </button>
+      <button class="nav__tab" data-route="generate" type="button">
+        <span class="nav__glyph">✦</span> Generate
+      </button>
+    </nav>
+
+    <main class="stage">
+      <!-- ===== TODAY ===== -->
+      <section id="view-today" class="view is-active" aria-labelledby="today-heading">
+        <h2 id="today-heading" class="view__heading">Today's Quest</h2>
+        <div id="today-quest"></div>
+        <div class="reroll-row">
+          <button id="reroll-btn" class="btn btn--ghost" type="button">
+            <span aria-hidden="true">🎲</span> Reroll
+            <span class="reroll-row__hint" id="reroll-hint">(1 left today)</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ===== JOURNAL ===== -->
+      <section id="view-journal" class="view" aria-labelledby="journal-heading" hidden>
+        <h2 id="journal-heading" class="view__heading">Your Journal</h2>
+
+        <div class="journal">
+          <div class="journal__col">
+            <h3 class="journal__subhead">
+              <span aria-hidden="true">⚔️</span> Active Quests
+              <span class="journal__tally" id="active-tally">0</span>
+            </h3>
+            <ul id="active-list" class="quest-list"></ul>
+            <p id="active-empty" class="empty-note">
+              No quests underway. Claim one from <em>Today</em> or forge your own in <em>Generate</em>.
+            </p>
+          </div>
+
+          <div class="journal__col">
+            <h3 class="journal__subhead">
+              <span aria-hidden="true">🏆</span> Completed
+              <span class="journal__tally" id="done-tally">0</span>
+            </h3>
+            <ul id="done-list" class="quest-list quest-list--done"></ul>
+            <p id="done-empty" class="empty-note">
+              Your hall of triumphs awaits its first tale.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== GENERATE ===== -->
+      <section id="view-generate" class="view" aria-labelledby="generate-heading" hidden>
+        <h2 id="generate-heading" class="view__heading">Forge a Quest</h2>
+        <p class="view__sub">
+          Craft your own side quest and add it straight to your journal.
+        </p>
+
+        <form id="generate-form" class="forge" autocomplete="off">
+          <label class="forge__field">
+            <span class="forge__label">Quest Name</span>
+            <input
+              id="f-title"
+              name="title"
+              type="text"
+              maxlength="60"
+              required
+              placeholder="e.g. The Midnight Bakery Run"
+            />
+          </label>
+
+          <label class="forge__field">
+            <span class="forge__label">The Task</span>
+            <textarea
+              id="f-desc"
+              name="description"
+              rows="3"
+              maxlength="240"
+              required
+              placeholder="Describe the adventure a fellow traveller must undertake…"
+            ></textarea>
+          </label>
+
+          <div class="forge__grid">
+            <label class="forge__field">
+              <span class="forge__label">Time</span>
+              <select id="f-time" name="time">
+                <option>10 min</option>
+                <option selected>30 min</option>
+                <option>1 hr</option>
+                <option>Half a day</option>
+                <option>1 day</option>
+              </select>
+            </label>
+            <label class="forge__field">
+              <span class="forge__label">Cost</span>
+              <select id="f-cost" name="cost">
+                <option selected>Free</option>
+                <option>Modest</option>
+                <option>A splurge</option>
+              </select>
+            </label>
+            <label class="forge__field">
+              <span class="forge__label">Spirit</span>
+              <select id="f-spirit" name="spirit">
+                <option selected>Adventurous</option>
+                <option>Peaceful</option>
+                <option>Kind</option>
+                <option>Creative</option>
+                <option>Whimsical</option>
+                <option>Social</option>
+                <option>Reflective</option>
+                <option>Nurturing</option>
+              </select>
+            </label>
+            <label class="forge__field">
+              <span class="forge__label">Difficulty</span>
+              <select id="f-diff" name="difficulty">
+                <option>Easy</option>
+                <option selected>Medium</option>
+                <option>Hard</option>
+              </select>
+            </label>
+          </div>
+
+          <label class="forge__field">
+            <span class="forge__label">Icons <em>(optional — up to 5 emoji)</em></span>
+            <input
+              id="f-icons"
+              name="icons"
+              type="text"
+              placeholder="🌙 🥐 ✨"
+            />
+          </label>
+
+          <div class="forge__actions">
+            <button class="btn btn--primary" type="submit">
+              <span aria-hidden="true">✧</span> Add to Journal
+            </button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <!-- ===== Toast ===== -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <footer class="site-foot">
+      <p>Built for tiny days that deserve a story. · <span id="foot-date"></span></p>
+    </footer>
+
+    <script src="quests.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
