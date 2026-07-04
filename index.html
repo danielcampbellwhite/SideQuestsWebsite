@@ -103,6 +103,13 @@
             <p id="active-empty" class="empty-note">
               No quests underway. Claim one from <em>Today</em> or forge your own in <em>Generate</em>.
             </p>
+            <div id="complete-bar" class="complete-bar" hidden>
+              <p class="complete-bar__hint">Tick the quests you've finished, then:</p>
+              <button id="complete-selected" class="btn btn--primary btn--block" type="button" disabled>
+                <span aria-hidden="true">✓</span> Complete Selected
+                <span id="complete-count">(0)</span>
+              </button>
+            </div>
           </div>
 
           <div class="journal__col">

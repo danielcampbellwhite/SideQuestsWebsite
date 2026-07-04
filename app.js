@@ -681,6 +681,10 @@
      JOURNAL
      ============================================================ */
   let journalFilter = "all";
+  const selectedUids = new Set();
+  document
+    .getElementById("complete-selected")
+    .addEventListener("click", completeSelected);
 
   function renderFilters(list) {
     const container = document.getElementById("journal-filters");
@@ -759,18 +763,43 @@
     document.getElementById("active-tally").textContent = active.length;
     document.getElementById("done-tally").textContent = done.length;
 
-    // wire events
-    Array.from(document.querySelectorAll("[data-complete]")).forEach((el) => {
-      el.addEventListener("click", () => requestComplete(el.dataset.complete));
+    // drop any selections whose quest is no longer active
+    const activeUids = new Set(active.map((q) => q.uid));
+    Array.from(selectedUids).forEach((uid) => {
+      if (!activeUids.has(uid)) selectedUids.delete(uid);
     });
+
+    // wire selection checkboxes
+    Array.from(document.querySelectorAll("[data-select]")).forEach((el) => {
+      el.addEventListener("change", () => {
+        if (el.checked) selectedUids.add(el.dataset.select);
+        else selectedUids.delete(el.dataset.select);
+        updateCompleteBar();
+      });
+    });
+    // wire abandon buttons
     Array.from(document.querySelectorAll("[data-remove]")).forEach((el) => {
       el.addEventListener("click", () => requestDiscard(el.dataset.remove));
     });
+    updateCompleteBar();
+  }
+
+  function updateCompleteBar() {
+    const bar = document.getElementById("complete-bar");
+    const btn = document.getElementById("complete-selected");
+    const count = document.getElementById("complete-count");
+    const hasActive =
+      getJournal().filter((q) => q.status === "active").length > 0;
+    bar.hidden = !hasActive;
+    const n = selectedUids.size;
+    btn.disabled = n === 0;
+    count.textContent = `(${n})`;
   }
 
   function cardHtml(q) {
     const done = q.status === "done";
     const iconsHtml = (q.icons || []).join(" ");
+    const selected = selectedUids.has(q.uid);
     const foot = done
       ? `<div class="card__foot">
            <span class="card__stamp card__stamp--done">
@@ -778,17 +807,10 @@
            </span>
          </div>`
       : `<div class="card__foot card__foot--actions">
-           <button class="btn btn--mini btn--primary" type="button" data-complete="${q.uid}">
-             <span aria-hidden="true">✓</span> Mark Complete
-           </button>
            <span class="card__reward">+${questXp(q)} XP</span>
            <button class="card__remove" type="button" data-remove="${q.uid}">Abandon</button>
          </div>`;
-    return `
-      <li>
-        <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}${
-      done ? " card--done" : ""
-    }">
+    const body = `
           <div class="card__body">
             ${q.rarity === "legendary" ? `<span class="legendary-badge legendary-badge--sm">★ Legendary</span>` : ""}
             <h4 class="card__title">${escapeHtml(q.title)}</h4>
@@ -796,28 +818,56 @@
             <p class="card__desc">${escapeHtml(q.description)}</p>
             <div class="card__meta">${tagHtml(q)}</div>
             ${foot}
-          </div>
+          </div>`;
+    const check = done
+      ? ""
+      : `<label class="card__select-wrap">
+           <input class="card__select" type="checkbox" data-select="${q.uid}"
+             ${selected ? "checked" : ""}
+             aria-label="Select '${escapeHtml(q.title)}' to complete" />
+         </label>`;
+    return `
+      <li>
+        <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}${
+      done ? " card--done" : " card--active"
+    }">
+          ${check}${body}
         </article>
       </li>`;
   }
 
-  // Completion is one-way and confirmed — no un-checking.
-  async function requestComplete(uidVal) {
-    const q = getJournal().find((x) => x.uid === uidVal);
-    if (!q || q.status === "done") return;
+  // Completion is one-way and confirmed. Complete one or many selected quests.
+  async function completeSelected() {
+    const ids = Array.from(selectedUids).filter((uid) => {
+      const q = getJournal().find((x) => x.uid === uid);
+      return q && q.status === "active";
+    });
+    if (!ids.length) return;
     const ok = await confirmDialog(
-      "Are you sure you want to mark this quest as complete? This cannot be undone.",
-      "Yes, complete it"
+      ids.length === 1
+        ? "Are you sure you want to mark this quest as complete? This cannot be undone."
+        : `Are you sure you want to mark these ${ids.length} quests as complete? This cannot be undone.`,
+      ids.length === 1 ? "Yes, complete it" : "Yes, complete them"
     );
     if (!ok) return;
-    const list = getJournal();
-    const target = list.find((x) => x.uid === uidVal);
-    if (!target || target.status === "done") return;
     const before = computeStats();
-    target.status = "done";
-    target.completedAt = todayKey();
+    const list = getJournal();
+    let gained = 0;
+    ids.forEach((uid) => {
+      const q = list.find((x) => x.uid === uid);
+      if (q && q.status === "active") {
+        q.status = "done";
+        q.completedAt = todayKey();
+        gained += questXp(q);
+      }
+    });
     setJournal(list);
-    toast(`🏆 Quest complete · +${questXp(target)} XP`);
+    selectedUids.clear();
+    toast(
+      ids.length === 1
+        ? `🏆 Quest complete · +${gained} XP`
+        : `🏆 ${ids.length} quests complete · +${gained} XP`
+    );
     announceProgress(before, computeStats());
     renderJournal();
   }
