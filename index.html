@@ -65,19 +65,26 @@
       <button class="nav__tab" data-route="generate" type="button">
         <span class="nav__glyph">✦</span> Generate
       </button>
+      <button class="nav__tab" data-route="hero" type="button">
+        <span class="nav__glyph">🛡️</span> Hero
+      </button>
     </nav>
+
+    <!-- ===== Hero progress bar (always visible) ===== -->
+    <button id="hero-bar" class="hero-bar" type="button" aria-label="View your hero profile">
+      <span class="hero-bar__badge"><span id="hb-level">1</span></span>
+      <span class="hero-bar__mid">
+        <span class="hero-bar__rank" id="hb-rank">Novice Wanderer</span>
+        <span class="hero-bar__track"><span class="hero-bar__fill" id="hb-fill"></span></span>
+      </span>
+      <span class="hero-bar__xp" id="hb-xp">0 XP</span>
+    </button>
 
     <main class="stage">
       <!-- ===== TODAY ===== -->
       <section id="view-today" class="view is-active" aria-labelledby="today-heading">
         <h2 id="today-heading" class="view__heading">Today's Quest</h2>
         <div id="today-quest"></div>
-        <div class="reroll-row">
-          <button id="reroll-btn" class="btn btn--ghost" type="button">
-            <span aria-hidden="true">🎲</span> Reroll
-            <span class="reroll-row__hint" id="reroll-hint">(1 left today)</span>
-          </button>
-        </div>
       </section>
 
       <!-- ===== JOURNAL ===== -->
@@ -116,6 +123,11 @@
         <h2 id="generate-heading" class="view__heading">Forge a Quest</h2>
         <p class="view__sub">
           Craft your own side quest and add it straight to your journal.
+        </p>
+
+        <p id="forge-lock" class="lock-note" hidden>
+          <span aria-hidden="true">🔒</span> Your journal is full — you can hold
+          <strong>5 active quests</strong> at a time. Complete some before forging more.
         </p>
 
         <form id="generate-form" class="forge" autocomplete="off">
@@ -195,7 +207,44 @@
           </div>
         </form>
       </section>
+
+      <!-- ===== HERO ===== -->
+      <section id="view-hero" class="view" aria-labelledby="hero-heading" hidden>
+        <h2 id="hero-heading" class="view__heading">Hero's Ledger</h2>
+
+        <div id="hero-profile"></div>
+
+        <h3 class="hero-section">
+          <span aria-hidden="true">✦</span> Cosmetic Unlocks
+        </h3>
+        <p class="hero-section__hint">
+          Level up to unlock new realms. Tap an unlocked look to equip it.
+        </p>
+        <div id="hero-themes" class="theme-grid"></div>
+
+        <h3 class="hero-section">
+          <span aria-hidden="true">✦</span> Achievements
+          <span class="hero-section__count" id="ach-count"></span>
+        </h3>
+        <div id="hero-achievements" class="ach-grid"></div>
+      </section>
     </main>
+
+    <!-- ===== Confirm modal ===== -->
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-msg">
+      <div class="modal__backdrop" data-modal-cancel></div>
+      <div class="modal__card">
+        <p class="modal__msg" id="modal-msg"></p>
+        <div class="modal__actions">
+          <button id="modal-cancel" class="btn btn--ghost" type="button" data-modal-cancel>
+            Cancel
+          </button>
+          <button id="modal-ok" class="btn btn--primary" type="button">
+            <span aria-hidden="true">✓</span> Yes, complete it
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ===== Toast ===== -->
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
