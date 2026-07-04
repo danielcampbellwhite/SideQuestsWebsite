@@ -11,6 +11,55 @@
     journal: "sq.journal",
   };
 
+  /* ============================================================
+     Gamification config
+     ============================================================ */
+  // XP earned when a quest is completed.
+  const XP_BY_DIFFICULTY = { Easy: 10, Medium: 20, Hard: 35 };
+  const LEGENDARY_BONUS = 50;
+
+  // Cumulative XP thresholds and fantasy rank titles.
+  const RANKS = [
+    { level: 1, title: "Novice Wanderer", xp: 0 },
+    { level: 2, title: "Curious Traveller", xp: 60 },
+    { level: 3, title: "Apprentice Adventurer", xp: 150 },
+    { level: 4, title: "Seasoned Explorer", xp: 280 },
+    { level: 5, title: "Trailblazer", xp: 460 },
+    { level: 6, title: "Quest Seeker", xp: 700 },
+    { level: 7, title: "Pathfinder", xp: 1000 },
+    { level: 8, title: "Wayfarer Knight", xp: 1380 },
+    { level: 9, title: "Master Adventurer", xp: 1850 },
+    { level: 10, title: "Legendary Hero", xp: 2450 },
+    { level: 11, title: "Grand Voyager", xp: 3200 },
+    { level: 12, title: "Mythic Champion", xp: 4200 },
+  ];
+  const RANK_STEP = 1500; // XP per level beyond the table
+
+  // Cosmetic themes, each unlocked at a level. light + night are free.
+  const THEMES = {
+    light: { label: "Daylight", icon: "☀️", level: 1, mode: "light" },
+    night: { label: "Nightfall", icon: "🌙", level: 1, mode: "dark" },
+    forest: { label: "Enchanted Forest", icon: "🌲", level: 3, mode: "light" },
+    royal: { label: "Royal Court", icon: "👑", level: 6, mode: "dark" },
+    arcane: { label: "Arcane Sanctum", icon: "🔮", level: 10, mode: "dark" },
+  };
+
+  // Achievements are derived from your journal — no separate bookkeeping needed.
+  const ACHIEVEMENTS = [
+    { id: "first-steps", icon: "🌱", name: "First Steps", desc: "Complete your first quest.", check: (s) => s.completed >= 1 },
+    { id: "getting-hang", icon: "⚔️", name: "Getting the Hang of It", desc: "Complete 5 quests.", check: (s) => s.completed >= 5 },
+    { id: "dedicated", icon: "🛡️", name: "Dedicated Adventurer", desc: "Complete 25 quests.", check: (s) => s.completed >= 25 },
+    { id: "centurion", icon: "🏆", name: "Centurion", desc: "Complete 100 quests.", check: (s) => s.completed >= 100 },
+    { id: "legend-slayer", icon: "🐉", name: "Legend Slayer", desc: "Complete a Legendary quest.", check: (s) => s.hasLegendary },
+    { id: "many-trades", icon: "🧭", name: "Jack of Many Trades", desc: "Complete quests in 5 categories.", check: (s) => s.categories.size >= 5 },
+    { id: "renaissance", icon: "🌈", name: "Renaissance Hero", desc: "Complete a quest in every category.", check: (s) => s.categories.size >= Object.keys(CATEGORIES).length },
+    { id: "forger", icon: "✨", name: "Quest Forger", desc: "Forge your own custom quest.", check: (s) => s.hasCustom },
+    { id: "on-a-roll", icon: "🔥", name: "On a Roll", desc: "Reach a 3-day streak.", check: (s) => s.streak >= 3 },
+    { id: "unstoppable", icon: "⚡", name: "Unstoppable", desc: "Reach a 7-day streak.", check: (s) => s.streak >= 7 },
+    { id: "rising-star", icon: "⭐", name: "Rising Star", desc: "Reach Level 5.", check: (s) => s.level >= 5 },
+    { id: "living-legend", icon: "👑", name: "Living Legend", desc: "Reach Level 10.", check: (s) => s.level >= 10 },
+  ];
+
   /* ---------- storage helpers ---------- */
   function load(key, fallback) {
     try {
@@ -49,14 +98,30 @@
       Math.floor(performance.now() % 100000);
   }
 
-  /* ---------- toast ---------- */
+  /* ---------- toast (queued) ---------- */
   let toastTimer = null;
+  let toastActive = false;
+  const toastQueue = [];
   const toastEl = document.getElementById("toast");
-  function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("is-visible");
+  function toast(msg, type) {
+    toastQueue.push({ msg: msg, type: type || "normal" });
+    if (!toastActive) nextToast();
+  }
+  function nextToast() {
+    if (!toastQueue.length) {
+      toastActive = false;
+      return;
+    }
+    toastActive = true;
+    const item = toastQueue.shift();
+    toastEl.textContent = item.msg;
+    toastEl.className = "toast is-visible" + (item.type === "epic" ? " toast--epic" : "");
+    const dur = item.type === "epic" ? 3600 : 2300;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("is-visible"), 2600);
+    toastTimer = setTimeout(() => {
+      toastEl.classList.remove("is-visible");
+      setTimeout(nextToast, 260);
+    }, dur);
   }
 
   /* ============================================================
@@ -64,17 +129,22 @@
      ============================================================ */
   const themeToggle = document.getElementById("theme-toggle");
   function applyTheme(theme) {
+    if (!THEMES[theme]) theme = "light";
+    const mode = THEMES[theme].mode;
     document.documentElement.setAttribute("data-theme", theme);
-    themeToggle.setAttribute("aria-checked", theme === "night" ? "true" : "false");
+    document.documentElement.setAttribute("data-mode", mode);
+    themeToggle.setAttribute("aria-checked", mode === "dark" ? "true" : "false");
     save(STORE.theme, theme);
+    // keep the Hero theme picker in sync if it is on screen
+    if (views.hero && !views.hero.hidden) renderHeroThemes();
   }
-  applyTheme(load(STORE.theme, "light"));
+  function currentTheme() {
+    return document.documentElement.getAttribute("data-theme") || "light";
+  }
+  // The banner switch is a quick day/night flip between the two base looks.
   themeToggle.addEventListener("click", () => {
-    const next =
-      document.documentElement.getAttribute("data-theme") === "night"
-        ? "light"
-        : "night";
-    applyTheme(next);
+    const dark = THEMES[currentTheme()].mode === "dark";
+    applyTheme(dark ? "light" : "night");
   });
 
   /* ============================================================
@@ -85,6 +155,7 @@
     today: document.getElementById("view-today"),
     journal: document.getElementById("view-journal"),
     generate: document.getElementById("view-generate"),
+    hero: document.getElementById("view-hero"),
   };
   function route(name) {
     if (!views[name]) name = "today";
@@ -95,10 +166,14 @@
     });
     tabs.forEach((t) => t.classList.toggle("is-active", t.dataset.route === name));
     if (name === "journal") renderJournal();
+    if (name === "hero") renderHero();
     if (location.hash !== "#" + name) history.replaceState(null, "", "#" + name);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   tabs.forEach((t) => t.addEventListener("click", () => route(t.dataset.route)));
+  document
+    .getElementById("hero-bar")
+    .addEventListener("click", () => route("hero"));
 
   /* ============================================================
      Journal state
@@ -109,6 +184,7 @@
   function setJournal(list) {
     save(STORE.journal, list);
     updateBadge();
+    refreshHeroBar();
   }
   function updateBadge() {
     const list = getJournal();
@@ -180,6 +256,216 @@
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
+  }
+
+  /* ============================================================
+     Gamification — XP, levels, stats, Hero page
+     ============================================================ */
+  function questXp(q) {
+    const base = XP_BY_DIFFICULTY[q.difficulty] || 20;
+    return base + (q.rarity === "legendary" ? LEGENDARY_BONUS : 0);
+  }
+
+  // Level + progress from a total XP value (extrapolates past the rank table).
+  function levelInfo(totalXp) {
+    let cur = RANKS[0];
+    for (let i = 0; i < RANKS.length; i++) {
+      if (totalXp >= RANKS[i].xp) cur = RANKS[i];
+      else break;
+    }
+    const last = RANKS[RANKS.length - 1];
+    let level = cur.level;
+    let title = cur.title;
+    let baseXp = cur.xp;
+    let nextXp;
+    if (cur.level < last.level) {
+      nextXp = RANKS[cur.level].xp; // next entry (levels are sequential)
+    } else {
+      const over = totalXp - last.xp;
+      const extra = Math.floor(over / RANK_STEP);
+      level = last.level + extra;
+      baseXp = last.xp + extra * RANK_STEP;
+      nextXp = baseXp + RANK_STEP;
+    }
+    const into = totalXp - baseXp;
+    const span = nextXp - baseXp;
+    return {
+      level: level,
+      title: title,
+      into: into,
+      span: span,
+      progress: span > 0 ? Math.max(0, Math.min(1, into / span)) : 1,
+      toNext: Math.max(0, nextXp - totalXp),
+      nextLevel: level + 1,
+    };
+  }
+
+  // Consecutive-day completion streak, counting up to today (or yesterday).
+  function computeStreak(doneQuests) {
+    const days = new Set(doneQuests.map((q) => q.completedAt).filter(Boolean));
+    if (!days.size) return 0;
+    const fmt = (dt) => {
+      const m = String(dt.getMonth() + 1).padStart(2, "0");
+      const d = String(dt.getDate()).padStart(2, "0");
+      return `${dt.getFullYear()}-${m}-${d}`;
+    };
+    const cursor = new Date();
+    if (!days.has(fmt(cursor))) {
+      cursor.setDate(cursor.getDate() - 1);
+      if (!days.has(fmt(cursor))) return 0;
+    }
+    let streak = 0;
+    while (days.has(fmt(cursor))) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function computeStats() {
+    const list = getJournal();
+    const done = list.filter((q) => q.status === "done");
+    const totalXp = done.reduce((sum, q) => sum + questXp(q), 0);
+    const info = levelInfo(totalXp);
+    return {
+      list: list,
+      done: done,
+      completed: done.length,
+      totalXp: totalXp,
+      info: info,
+      level: info.level,
+      categories: new Set(done.map((q) => q.category).filter(Boolean)),
+      hasLegendary: done.some((q) => q.rarity === "legendary"),
+      hasCustom: list.some((q) => !q.sourceId),
+      streak: computeStreak(done),
+    };
+  }
+
+  function achUnlocked(stats) {
+    return ACHIEVEMENTS.filter((a) => a.check(stats));
+  }
+
+  /* ---------- hero progress bar ---------- */
+  function refreshHeroBar() {
+    const s = computeStats();
+    document.getElementById("hb-level").textContent = s.info.level;
+    document.getElementById("hb-rank").textContent = s.info.title;
+    document.getElementById("hb-fill").style.width =
+      Math.round(s.info.progress * 100) + "%";
+    document.getElementById("hb-xp").textContent = s.totalXp + " XP";
+  }
+
+  /* ---------- Hero page ---------- */
+  function renderHero() {
+    const s = computeStats();
+    const info = s.info;
+    const unlocked = achUnlocked(s).length;
+
+    document.getElementById("hero-profile").innerHTML = `
+      <div class="profile">
+        <div class="profile__badge">
+          <span class="profile__lvl-label">Level</span>
+          <span class="profile__lvl">${info.level}</span>
+        </div>
+        <div class="profile__main">
+          <div class="profile__rank">${escapeHtml(info.title)}</div>
+          <div class="profile__bar">
+            <div class="profile__fill" style="width:${Math.round(info.progress * 100)}%"></div>
+          </div>
+          <div class="profile__xp">
+            <strong>${s.totalXp} XP</strong> · ${info.toNext} XP to Level ${info.nextLevel}
+          </div>
+        </div>
+      </div>
+      <div class="stat-tiles">
+        ${statTile("⭐", s.totalXp, "Total XP")}
+        ${statTile("✅", s.completed, s.completed === 1 ? "Quest Done" : "Quests Done")}
+        ${statTile("🔥", s.streak, "Day Streak")}
+        ${statTile("🎖️", unlocked + "/" + ACHIEVEMENTS.length, "Badges")}
+      </div>`;
+
+    renderHeroThemes();
+
+    document.getElementById("ach-count").textContent = `${unlocked}/${ACHIEVEMENTS.length}`;
+    document.getElementById("hero-achievements").innerHTML = ACHIEVEMENTS.map(
+      (a) => achCard(a, a.check(s))
+    ).join("");
+  }
+
+  function statTile(icon, value, label) {
+    return `
+      <div class="stat-tile">
+        <span class="stat-tile__icon">${icon}</span>
+        <span class="stat-tile__value">${escapeHtml(value)}</span>
+        <span class="stat-tile__label">${escapeHtml(label)}</span>
+      </div>`;
+  }
+
+  function renderHeroThemes() {
+    const container = document.getElementById("hero-themes");
+    if (!container) return;
+    const s = computeStats();
+    const active = currentTheme();
+    container.innerHTML = Object.keys(THEMES)
+      .map((key) => {
+        const t = THEMES[key];
+        const unlocked = s.level >= t.level;
+        const isActive = active === key;
+        const state = isActive
+          ? "Equipped"
+          : unlocked
+          ? "Equip"
+          : "🔒 Level " + t.level;
+        return `
+        <button type="button"
+          class="theme-card${unlocked ? "" : " is-locked"}${isActive ? " is-equipped" : ""}"
+          data-theme-pick="${key}" ${unlocked ? "" : "disabled"}>
+          <span class="theme-card__swatch tswatch-${key}"></span>
+          <span class="theme-card__name">${t.icon} ${escapeHtml(t.label)}</span>
+          <span class="theme-card__state">${state}</span>
+        </button>`;
+      })
+      .join("");
+    Array.from(container.querySelectorAll("[data-theme-pick]")).forEach((el) => {
+      el.addEventListener("click", () => {
+        const key = el.dataset.themePick;
+        if (computeStats().level < THEMES[key].level) return;
+        applyTheme(key);
+        toast(`${THEMES[key].icon} ${THEMES[key].label} equipped.`);
+      });
+    });
+  }
+
+  function achCard(a, unlocked) {
+    return `
+      <div class="ach${unlocked ? " is-unlocked" : " is-locked"}">
+        <span class="ach__icon">${unlocked ? a.icon : "🔒"}</span>
+        <span class="ach__text">
+          <span class="ach__name">${escapeHtml(a.name)}</span>
+          <span class="ach__desc">${escapeHtml(a.desc)}</span>
+        </span>
+      </div>`;
+  }
+
+  // Celebrate level-ups, theme unlocks, and new achievements after a change.
+  function announceProgress(before, after) {
+    if (after.info.level > before.info.level) {
+      toast(
+        `⬆️ Level Up! You are now Level ${after.info.level} — ${after.info.title}`,
+        "epic"
+      );
+      Object.keys(THEMES).forEach((k) => {
+        const lvl = THEMES[k].level;
+        if (lvl > before.info.level && lvl <= after.info.level) {
+          toast(`🎨 New look unlocked: ${THEMES[k].label} — equip it on the Hero page!`, "epic");
+        }
+      });
+    }
+    ACHIEVEMENTS.forEach((a) => {
+      if (a.check(after) && !a.check(before)) {
+        toast(`🎖️ Achievement: ${a.name}`, "epic");
+      }
+    });
   }
 
   /* ============================================================
@@ -371,8 +657,8 @@
     const done = q.status === "done";
     const iconsHtml = (q.icons || []).join(" ");
     const stamp = done
-      ? `Completed ${escapeHtml(q.completedAt || "")}`
-      : `Claimed ${escapeHtml(q.addedAt || "")}`;
+      ? `Completed ${escapeHtml(q.completedAt || "")} · +${questXp(q)} XP`
+      : `Claimed ${escapeHtml(q.addedAt || "")} · ${questXp(q)} XP`;
     return `
       <li>
         <article class="card${q.rarity === "legendary" ? " card--legendary" : ""}">
@@ -399,15 +685,19 @@
     const list = getJournal();
     const q = list.find((x) => x.uid === uidVal);
     if (!q) return;
+    const before = computeStats(); // reads storage = pre-change state
     if (q.status === "active") {
       q.status = "done";
       q.completedAt = todayKey();
-      toast("🏆 Quest complete — glory is yours!");
+      setJournal(list);
+      toast(`🏆 Quest complete · +${questXp(q)} XP`);
+      announceProgress(before, computeStats());
     } else {
       q.status = "active";
       q.completedAt = null;
+      setJournal(list);
+      toast(`Quest returned to active · −${questXp(q)} XP`);
     }
-    setJournal(list);
     renderJournal();
   }
 
@@ -446,9 +736,11 @@
       cost: document.getElementById("f-cost").value,
       difficulty: document.getElementById("f-diff").value,
     };
+    const before = computeStats();
     addToJournal(quest, null);
     form.reset();
     toast("✧ Your quest is forged and added to the journal!");
+    announceProgress(before, computeStats());
     route("journal");
   });
 
@@ -474,7 +766,15 @@
     { weekday: "long", year: "numeric", month: "long", day: "numeric" }
   );
 
+  // Restore the saved theme, but only if the player has unlocked it.
+  (function initTheme() {
+    const saved = load(STORE.theme, "light");
+    const level = computeStats().level;
+    applyTheme(THEMES[saved] && level >= THEMES[saved].level ? saved : "light");
+  })();
+
   updateBadge();
+  refreshHeroBar();
   renderToday();
   const initial = (location.hash || "#today").replace("#", "");
   route(initial);
