@@ -499,8 +499,9 @@
      TODAY
      ============================================================ */
   const todayQuestEl = document.getElementById("today-quest");
-  const MAX_REROLLS = 1;
-  const MAX_ACTIVE = 5;
+  const MAX_REROLLS = 1; // per offer
+  const MAX_ACTIVE = 5; // active quests at any time
+  const MAX_DAILY = 3; // quests offered per day (no rollover)
 
   function activeCount() {
     return getJournal().filter((q) => q.status === "active").length;
@@ -531,25 +532,37 @@
     return easy.length ? easy[seed % easy.length] : pickQuestIndex(seedStr);
   }
 
+  // The quest index for a given draw of a day. A brand-new traveller's very
+  // first draw is an easy win; otherwise a normal (rarely legendary) pick.
+  function offerIndex(date, draw, firstEver, reroll) {
+    if (reroll) return pickQuestIndex(date + "#" + draw + "#r");
+    if (firstEver && draw === 0) return pickFirstQuestIndex(date);
+    return pickQuestIndex(date + "#" + draw);
+  }
+
   function getTodayState() {
     const key = todayKey();
     let state = load(STORE.today, null);
     if (!state || state.date !== key) {
-      // new day → fresh, hidden quest; reroll refilled; not yet accepted
+      // new day → up to MAX_DAILY draws, none taken, first offer hidden
       const firstEver = !load(STORE.started, false);
       if (firstEver) save(STORE.started, true);
       state = {
         date: key,
-        index: firstEver ? pickFirstQuestIndex(key) : pickQuestIndex(key),
+        taken: 0,
         revealed: false,
-        rerollsUsed: 0,
-        accepted: false,
+        rerollUsed: false,
+        index: offerIndex(key, 0, firstEver, false),
       };
       save(STORE.today, state);
     }
-    // fill in fields for anyone with older saved state
+    // migrate older saved state (single-quest model) to the draws model
+    if (state.taken === undefined) state.taken = state.accepted ? 1 : 0;
+    if (state.rerollUsed === undefined)
+      state.rerollUsed = (state.rerollsUsed || 0) > 0;
     if (state.revealed === undefined) state.revealed = false;
-    if (state.accepted === undefined) state.accepted = false;
+    if (state.index === undefined)
+      state.index = offerIndex(state.date, state.taken, false, false);
     return state;
   }
   function saveTodayState(state) {
@@ -586,18 +599,18 @@
   function renderToday() {
     renderStreak();
     const state = getTodayState();
-    const quest = QUEST_POOL[state.index];
     const active = activeCount();
+    const remaining = MAX_DAILY - state.taken;
 
-    // 1) Already accepted today → come back tomorrow.
-    if (state.accepted) {
+    // 1) All of today's draws used → come back tomorrow.
+    if (state.taken >= MAX_DAILY) {
       todayQuestEl.innerHTML = `
         <article class="scroll scroll--rest">
           <div class="rest__mark">🌙</div>
-          <h3 class="quest__title">Quest Accepted</h3>
+          <h3 class="quest__title">That's a Wrap for Today</h3>
           <p class="quest__desc">
-            You've taken on <strong>${escapeHtml(quest.title)}</strong> today.
-            Come back tomorrow for a new quest.
+            You've taken all <strong>${MAX_DAILY}</strong> of today's quests.
+            Come back tomorrow for a fresh set.
           </p>
           <div class="quest__cta">
             <button class="btn btn--ghost" type="button" data-goto="journal">
@@ -609,7 +622,7 @@
       return;
     }
 
-    // 2) Journal full → daily quests locked.
+    // 2) Journal full → locked until some quests are completed.
     if (active >= MAX_ACTIVE) {
       todayQuestEl.innerHTML = `
         <article class="scroll scroll--locked">
@@ -617,7 +630,8 @@
           <h3 class="quest__title">Daily Quests Locked</h3>
           <p class="quest__desc">
             Your journal is full (<strong>${active}/${MAX_ACTIVE} active</strong>).
-            Complete some quests to unlock your next daily quest.
+            Complete some quests to unlock more — you still have
+            <strong>${remaining}</strong> quest${remaining === 1 ? "" : "s"} to draw today.
           </p>
           <div class="quest__cta">
             <button class="btn btn--primary" type="button" data-goto="journal">
@@ -629,19 +643,22 @@
       return;
     }
 
-    // 3) Not revealed yet → face-down mystery scroll.
+    const counter = `<p class="draw-counter">Quest ${state.taken + 1} of ${MAX_DAILY} today</p>`;
+
+    // 3) Current offer not revealed → face-down mystery scroll.
     if (!state.revealed) {
       todayQuestEl.innerHTML = `
         <article class="scroll scroll--mystery">
+          ${counter}
           <div class="mystery__mark">?</div>
           <h3 class="quest__title">A Quest Awaits</h3>
           <p class="quest__desc">
-            Today's side quest is sealed. Reveal it to see what adventure the
-            day holds — then add it to your journal when you're ready.
+            A side quest lies sealed. Reveal it to see what adventure it holds —
+            then add it to your journal when you're ready.
           </p>
           <div class="quest__cta">
             <button class="btn btn--primary" id="reveal-btn" type="button">
-              <span aria-hidden="true">✦</span> Reveal Today's Quest
+              <span aria-hidden="true">✦</span> Reveal Quest
             </button>
           </div>
         </article>`;
@@ -654,8 +671,9 @@
       return;
     }
 
-    // 4) Revealed, not yet accepted → show quest with Accept + (maybe) Reroll.
-    const canReroll = state.rerollsUsed < MAX_REROLLS;
+    // 4) Offer revealed → Accept + (maybe) Reroll.
+    const quest = QUEST_POOL[state.index];
+    const canReroll = !state.rerollUsed;
     const inner = `
       <div class="quest__cta quest__cta--stack">
         <button class="btn btn--primary" id="accept-btn" type="button">
@@ -666,11 +684,11 @@
             ? `<button class="btn btn--ghost" id="reroll-btn" type="button">
                  <span aria-hidden="true">🎲</span> Reroll <span class="reroll-hint">(1 left)</span>
                </button>`
-            : `<p class="reroll-note">🎲 You rerolled — this is your quest for today.
-                 Accept it, or leave it and a fresh one arrives tomorrow.</p>`
+            : `<p class="reroll-note">🎲 You rerolled — this is this draw's quest.
+                 Accept it to unlock your next reveal.</p>`
         }
       </div>`;
-    todayQuestEl.innerHTML = questScrollHtml(quest, inner);
+    todayQuestEl.innerHTML = questScrollHtml(quest, counter + inner);
 
     document.getElementById("accept-btn").addEventListener("click", () => {
       if (activeCount() >= MAX_ACTIVE) {
@@ -678,22 +696,30 @@
         return;
       }
       const before = computeStats();
-      addToJournal(quest, "daily:" + state.date + ":" + quest.id);
-      state.accepted = true;
+      addToJournal(quest, "daily:" + state.date + ":" + state.taken + ":" + quest.id);
+      state.taken += 1;
+      state.revealed = false;
+      state.rerollUsed = false;
+      state.index = offerIndex(state.date, state.taken, false, false);
       saveTodayState(state);
-      toast("⚔️ Quest accepted — added to your journal!");
+      const left = MAX_DAILY - state.taken;
+      toast(
+        left > 0
+          ? `⚔️ Quest accepted — ${left} more available today!`
+          : "⚔️ Quest accepted — that's all 3 for today!"
+      );
       announceProgress(before, computeStats());
       renderToday();
     });
 
     if (canReroll) {
       document.getElementById("reroll-btn").addEventListener("click", () => {
-        let next = pickQuestIndex(state.date + "-reroll");
+        let next = offerIndex(state.date, state.taken, false, true);
         if (next === state.index) next = (next + 1) % QUEST_POOL.length;
         state.index = next;
-        state.rerollsUsed += 1;
+        state.rerollUsed = true;
         saveTodayState(state);
-        toast("🎲 The dice are cast — this is your quest for today.");
+        toast("🎲 The dice are cast — a new quest appears.");
         renderToday();
       });
     }
